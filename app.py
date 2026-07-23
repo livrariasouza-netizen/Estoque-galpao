@@ -11,7 +11,7 @@ st.set_page_config(
 )
 
 # --- CONFIGURAÇÕES DO GALPÃO ---
-SENHA_ACESSO = "1234"
+SENHA_ACESSO = "1980"
 NOME_ARQUIVO = "estoque_galpao.json"
 
 NOME_DEV = "Vagner Souza"
@@ -113,7 +113,7 @@ with col_logo:
 
 with col_titulo:
     st.title("MAPA ESTOQUE GALPÃO PREMIUM")
-    st.caption("Sistema de Localização de Pallets e Controle do Galpão")
+    st.caption("Sistema de Localização de vinhos do Galpão")
 
 st.markdown("---")
 
