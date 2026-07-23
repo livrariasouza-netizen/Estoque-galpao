@@ -11,11 +11,16 @@ st.set_page_config(
 )
 
 # --- CONFIGURAÇÕES DO GALPÃO ---
-SENHA_ACESSO = "1234"
+SENHA_ACESSO = "1980"
 NOME_ARQUIVO = "estoque_galpao.json"
 
 NOME_DEV = "Vagner Souza"
 FONE_DEV = "(31) 98968-4010"
+
+# Listas padronizadas expandidas para galpões grandes (Até 25 Corredores e 25 Pallets)
+LISTA_CORREDORES = [f"Corredor {i:02d}" for i in range(1, 26)]
+LISTA_PALLETS = [f"Pallet {i:02d}" for i in range(1, 26)]
+LISTA_LADOS = ["Direito", "Esquerdo", "Centro / Único"]
 
 # Opções de safra padronizadas
 ANOS_SAFRA = [str(ano) for ano in range(2026, 1989, -1)]
@@ -37,7 +42,7 @@ estoque_padrao = [
         "nome": "Falernia Reserva",
         "tipo": "Tinto",
         "safra": "2021",
-        "pallet": "Corredor 1 - Pallet 2",
+        "pallet": "Corredor 01 - Pallet 02",
         "lado": "Direito",
         "caixa": "12 garrafas",
         "volume": "750ml",
@@ -46,7 +51,7 @@ estoque_padrao = [
         "nome": "Volpaia Chianti (375ml)",
         "tipo": "Tinto",
         "safra": "2020",
-        "pallet": "Corredor 2 - Pallet 1",
+        "pallet": "Corredor 02 - Pallet 01",
         "lado": "Esquerdo",
         "caixa": "24 garrafas",
         "volume": "375ml",
@@ -55,7 +60,7 @@ estoque_padrao = [
         "nome": "Stoneburn Sauvignon Blanc",
         "tipo": "Branco",
         "safra": "2022",
-        "pallet": "Corredor 3 - Pallet 4",
+        "pallet": "Corredor 03 - Pallet 04",
         "lado": "Direito",
         "caixa": "12 garrafas",
         "volume": "750ml",
@@ -130,7 +135,7 @@ with col_logo:
 
 with col_titulo:
     st.title("MAPA ESTOQUE GALPÃO PREMIUM")
-    st.caption("Sistema de Localização de Pallets e Controle do Galpão")
+    st.caption("Sistema de Localização de vinhos do Galpão")
 
 st.markdown("---")
 
@@ -254,7 +259,7 @@ elif menu == "3. Cadastrar novo vinho":
 
     nome = st.text_input("Nome do vinho / Marca:").strip()
 
-    # --- VERIFICAÇÃO WMS DE VINHO/SAFRA EXISTENTE ---
+    # Verificação WMS de duplicidade/safra existente
     outras_safras = []
     if nome:
         outras_safras = [
@@ -283,16 +288,14 @@ elif menu == "3. Cadastrar novo vinho":
         if safra_opcao == "Outra / Mais antiga":
             safra_custom = st.text_input("Digite o ano da safra (Ex: 1985):")
 
-        col_pallet, col_lado = st.columns(2)
-        with col_pallet:
-            pallet = st.text_input(
-                "Localização (Ex: Corredor 1 - Pallet 4):"
-            ).strip()
-        with col_lado:
-            lado = st.selectbox(
-                "↔️ Lado do Corredor:",
-                ["Direito", "Esquerdo", "Centro / Único"],
-            )
+        # Seleção Rápida de Localização (Corredor 01-25 + Pallet 01-25)
+        col_corr, col_pal, col_lad = st.columns(3)
+        with col_corr:
+            sel_corredor = st.selectbox("🛣️ Corredor:", LISTA_CORREDORES)
+        with col_pal:
+            sel_pallet = st.selectbox("📦 Pos./Pallet:", LISTA_PALLETS)
+        with col_lad:
+            lado = st.selectbox("↔️ Lado:", LISTA_LADOS)
 
         caixa_opcao = st.selectbox(
             "📦 Quantidade de garrafas por caixa:", OPCOES_CAIXA
@@ -324,12 +327,15 @@ elif menu == "3. Cadastrar novo vinho":
                 volume_custom if vol_opcao == "Outro valor" else vol_opcao
             )
 
-            if nome and tipo and pallet:
+            # Junta o corredor com o pallet de forma padronizada
+            pallet_final = f"{sel_corredor} - {sel_pallet}"
+
+            if nome and tipo:
                 novo_vinho = {
                     "nome": nome,
                     "tipo": tipo,
                     "safra": safra_final if safra_final else "Sem Safra (NV)",
-                    "pallet": pallet,
+                    "pallet": pallet_final,
                     "lado": lado,
                     "caixa": caixa_final if caixa_final else "12 garrafas",
                     "volume": volume_final if volume_final else "750ml",
@@ -337,11 +343,11 @@ elif menu == "3. Cadastrar novo vinho":
                 st.session_state.estoque.append(novo_vinho)
                 salvar_dados(st.session_state.estoque)
                 st.success(
-                    f"✅ '{nome}' - Safra {safra_final} cadastrado com sucesso!"
+                    f"✅ '{nome}' ({safra_final}) cadastrado com sucesso em `{pallet_final}`!"
                 )
                 st.rerun()
             else:
-                st.error("❌ Nome, Tipo e Localização são obrigatórios!")
+                st.error("❌ Nome e Tipo são obrigatórios!")
 
 # 4. EDITAR VINHO
 elif menu == "4. Editar vinho existente":
@@ -373,34 +379,17 @@ elif menu == "4. Editar vinho existente":
                 idx_s = OPCOES_SAFRA.index(safra_atual) if safra_atual in OPCOES_SAFRA else 0
                 nova_safra = st.selectbox("Nova Safra:", OPCOES_SAFRA, index=idx_s)
 
-            col_p, col_l = st.columns(2)
-            with col_p:
-                novo_pallet = st.text_input(
-                    "Nova Localização:", str(vinho.get("pallet", ""))
-                )
-            with col_l:
-                opcoes_lado = ["Direito", "Esquerdo", "Centro / Único"]
-                lado_atual = vinho.get("lado", "Direito")
-                idx_l = (
-                    opcoes_lado.index(lado_atual)
-                    if lado_atual in opcoes_lado
-                    else 0
-                )
-                novo_lado = st.selectbox(
-                    "Novo Lado:", opcoes_lado, index=idx_l
-                )
+            novo_pallet = st.text_input("Nova Localização:", str(vinho.get("pallet", "")))
+            
+            lado_atual = vinho.get("lado", "Direito")
+            idx_l = LISTA_LADOS.index(lado_atual) if lado_atual in LISTA_LADOS else 0
+            novo_lado = st.selectbox("Novo Lado:", LISTA_LADOS, index=idx_l)
 
             caixa_atual = vinho.get("caixa", "12 garrafas")
-            idx_caixa = (
-                OPCOES_CAIXA.index(caixa_atual)
-                if caixa_atual in OPCOES_CAIXA
-                else 0
-            )
+            idx_caixa = OPCOES_CAIXA.index(caixa_atual) if caixa_atual in OPCOES_CAIXA else 0
             nova_caixa = st.selectbox("Caixa:", OPCOES_CAIXA, index=idx_caixa)
 
-            novo_volume = st.text_input(
-                "Volume:", str(vinho.get("volume", "750ml"))
-            )
+            novo_volume = st.text_input("Volume:", str(vinho.get("volume", "750ml")))
 
             submit_edit = st.form_submit_button("💾 Salvar Alterações")
 
@@ -459,8 +448,6 @@ elif menu == "6. Exportar planilha (CSV)":
             file_name="estoque_galpao.csv",
             mime="text/csv",
         )
-        st.info(
-            "💡 O arquivo será salvo na pasta de Downloads do seu dispositivo."
-        )
+        st.info("💡 O arquivo será salvo na pasta de Downloads do seu dispositivo.")
     else:
         st.warning("Nenhum dado para exportar.")
