@@ -1,4 +1,4 @@
-# Estoque-galpaoimport json
+import json
 import os
 import pandas as pd
 import streamlit as st
@@ -11,11 +11,11 @@ st.set_page_config(
 )
 
 # --- CONFIGURAÇÕES DO GALPÃO ---
-SENHA_ACESSO = "1980"  # 👈 Senha para entrar no app do Galpão
+SENHA_ACESSO = "1234"  # 👈 Senha para entrar no app do Galpão
 NOME_ARQUIVO = "estoque_galpao.json"
 
 NOME_DEV = "Vagner Souza"
-FONE_DEV = "(31) 98968-4010"
+FONE_DEV = "(31) 99999-9999"
 
 # Dados iniciais de exemplo do Galpão
 estoque_padrao = [
