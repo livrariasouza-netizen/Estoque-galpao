@@ -11,17 +11,32 @@ st.set_page_config(
 )
 
 # --- CONFIGURAÇÕES DO GALPÃO ---
-SENHA_ACESSO = "1980"
+SENHA_ACESSO = "1234"
 NOME_ARQUIVO = "estoque_galpao.json"
 
 NOME_DEV = "Vagner Souza"
 FONE_DEV = "(31) 98968-4010"
+
+# Opções de safra padronizadas
+ANOS_SAFRA = [str(ano) for ano in range(2026, 1989, -1)]
+OPCOES_SAFRA = ["Sem Safra (NV)", "Outra / Mais antiga"] + ANOS_SAFRA
+
+# Opções de embalagem padronizadas (máximo 24 garrafas)
+OPCOES_CAIXA = [
+    "24 garrafas",
+    "12 garrafas",
+    "6 garrafas",
+    "3 garrafas",
+    "1 garrafa",
+    "Outra quantidade",
+]
 
 # Dados iniciais de exemplo do Galpão
 estoque_padrao = [
     {
         "nome": "Falernia Reserva",
         "tipo": "Tinto",
+        "safra": "2021",
         "pallet": "Corredor 1 - Pallet 2",
         "lado": "Direito",
         "caixa": "12 garrafas",
@@ -30,6 +45,7 @@ estoque_padrao = [
     {
         "nome": "Volpaia Chianti (375ml)",
         "tipo": "Tinto",
+        "safra": "2020",
         "pallet": "Corredor 2 - Pallet 1",
         "lado": "Esquerdo",
         "caixa": "24 garrafas",
@@ -38,6 +54,7 @@ estoque_padrao = [
     {
         "nome": "Stoneburn Sauvignon Blanc",
         "tipo": "Branco",
+        "safra": "2022",
         "pallet": "Corredor 3 - Pallet 4",
         "lado": "Direito",
         "caixa": "12 garrafas",
@@ -113,7 +130,7 @@ with col_logo:
 
 with col_titulo:
     st.title("MAPA ESTOQUE GALPÃO PREMIUM")
-    st.caption("Sistema de Localização de vinhos do Galpão")
+    st.caption("Sistema de Localização de Pallets e Controle do Galpão")
 
 st.markdown("---")
 
@@ -141,25 +158,15 @@ st.sidebar.markdown("---")
 st.sidebar.markdown(f"👨‍💻 **Desenvolvido por:** {NOME_DEV}")
 st.sidebar.markdown(f"📞 **Contato:** {FONE_DEV}")
 
-# Opções de embalagem padronizadas (máximo 24 garrafas)
-OPCOES_CAIXA = [
-    "24 garrafas",
-    "12 garrafas",
-    "6 garrafas",
-    "3 garrafas",
-    "1 garrafa",
-    "Outra quantidade",
-]
-
 # 1. BUSCAR VINHO
 if menu == "1. Buscar vinho (Voz e Texto)":
     st.header("🔍 BUSCAR VINHO NO GALPÃO")
 
-    sub_op = st.radio("Como deseja buscar?", ["Por Nome", "Por Tipo"])
+    sub_op = st.radio("Como deseja buscar?", ["Por Nome", "Por Tipo", "Por Safra"])
 
     st.markdown("#### 🎙️ Busca por Voz / Áudio")
     audio_input = st.audio_input(
-        "Toque no microfone e fale o nome do vinho ou marca:"
+        "Toque no microfone e fale o nome do vinho, marca ou safra:"
     )
 
     if audio_input:
@@ -174,10 +181,13 @@ if menu == "1. Buscar vinho (Voz e Texto)":
         for v in st.session_state.estoque:
             nome_vinho = str(v.get("nome", "")).lower()
             tipo_vinho = str(v.get("tipo", "")).lower()
+            safra_vinho = str(v.get("safra", "")).lower()
 
             if sub_op == "Por Nome" and termo in nome_vinho:
                 resultados.append(v)
             elif sub_op == "Por Tipo" and termo in tipo_vinho:
+                resultados.append(v)
+            elif sub_op == "Por Safra" and termo in safra_vinho:
                 resultados.append(v)
 
         if not resultados:
@@ -188,8 +198,9 @@ if menu == "1. Buscar vinho (Voz e Texto)":
                 lado_txt = (
                     f" - Lado {v.get('lado')}" if v.get("lado") else ""
                 )
+                safra_txt = f" ({v.get('safra')})" if v.get("safra") else ""
                 with st.expander(
-                    f"🍷 {v.get('nome', 'Sem nome')} ({v.get('tipo', 'S/T')}) ➔ 📍 {v.get('pallet', 'S/P')}{lado_txt}"
+                    f"🍷 {v.get('nome', 'Sem nome')}{safra_txt} [{v.get('tipo', 'S/T')}] ➔ 📍 {v.get('pallet', 'S/P')}{lado_txt}"
                 ):
                     st.write(
                         f"**Localização no Galpão:** {v.get('pallet', 'N/I')}"
@@ -197,6 +208,7 @@ if menu == "1. Buscar vinho (Voz e Texto)":
                     st.write(
                         f"**Lado do Corredor:** {v.get('lado', 'Não informado')}"
                     )
+                    st.write(f"**Safra:** {v.get('safra', 'N/I')}")
                     st.write(f"**Caixa:** {v.get('caixa', 'N/I')}")
                     st.write(f"**Volume:** {v.get('volume', 'N/I')}")
 
@@ -227,6 +239,7 @@ elif menu == "2. Ver todos os vinhos":
         colunas_map = {
             "nome": "Nome do Vinho",
             "tipo": "Tipo",
+            "safra": "Safra",
             "pallet": "Localização / Pallet",
             "lado": "Lado do Corredor",
             "caixa": "Caixa",
@@ -239,11 +252,36 @@ elif menu == "2. Ver todos os vinhos":
 elif menu == "3. Cadastrar novo vinho":
     st.header("➕ CADASTRAR VINHO NO GALPÃO")
 
+    nome = st.text_input("Nome do vinho / Marca:").strip()
+
+    # --- VERIFICAÇÃO WMS DE VINHO/SAFRA EXISTENTE ---
+    outras_safras = []
+    if nome:
+        outras_safras = [
+            v for v in st.session_state.estoque
+            if str(v.get("nome", "")).strip().lower() == nome.lower()
+        ]
+
+    if outras_safras:
+        st.info(f"ℹ️ **Atenção:** Este vinho já possui **{len(outras_safras)} registro(s)** no galpão:")
+        for item in outras_safras:
+            st.write(
+                f"- **Safra {item.get('safra', 'N/I')}** ➔ Local: `{item.get('pallet', 'N/I')}` (Lado: {item.get('lado', 'N/I')})"
+            )
+        st.caption("Você pode cadastrar uma **nova safra** ou **outra localização** preenchendo o formulário abaixo:")
+
     with st.form("form_cadastrar"):
-        nome = st.text_input("Nome do vinho / Marca:").strip()
-        tipo = st.text_input(
-            "Tipo (Tinto, Branco, Rosé, Espumante...):"
-        ).strip()
+        col_tipo, col_safra = st.columns(2)
+        with col_tipo:
+            tipo = st.text_input(
+                "Tipo (Tinto, Branco, Rosé, Espumante...):"
+            ).strip()
+        with col_safra:
+            safra_opcao = st.selectbox("📅 Safra:", OPCOES_SAFRA)
+
+        safra_custom = ""
+        if safra_opcao == "Outra / Mais antiga":
+            safra_custom = st.text_input("Digite o ano da safra (Ex: 1985):")
 
         col_pallet, col_lado = st.columns(2)
         with col_pallet:
@@ -276,6 +314,9 @@ elif menu == "3. Cadastrar novo vinho":
         submit = st.form_submit_button("✅ Salvar no Galpão")
 
         if submit:
+            safra_final = (
+                safra_custom if safra_opcao == "Outra / Mais antiga" else safra_opcao
+            )
             caixa_final = (
                 caixa_custom if caixa_opcao == "Outra quantidade" else caixa_opcao
             )
@@ -287,6 +328,7 @@ elif menu == "3. Cadastrar novo vinho":
                 novo_vinho = {
                     "nome": nome,
                     "tipo": tipo,
+                    "safra": safra_final if safra_final else "Sem Safra (NV)",
                     "pallet": pallet,
                     "lado": lado,
                     "caixa": caixa_final if caixa_final else "12 garrafas",
@@ -295,7 +337,7 @@ elif menu == "3. Cadastrar novo vinho":
                 st.session_state.estoque.append(novo_vinho)
                 salvar_dados(st.session_state.estoque)
                 st.success(
-                    f"✅ '{nome}' cadastrado com sucesso!"
+                    f"✅ '{nome}' - Safra {safra_final} cadastrado com sucesso!"
                 )
                 st.rerun()
             else:
@@ -309,7 +351,7 @@ elif menu == "4. Editar vinho existente":
         st.warning("Nenhum vinho cadastrado.")
     else:
         opcoes = [
-            f"{i + 1}. {v.get('nome', 'Sem nome')} - 📍 {v.get('pallet', 'Sem local')} ({v.get('lado', 'S/L')})"
+            f"{i + 1}. {v.get('nome', 'Sem nome')} ({v.get('safra', 'S/S')}) - 📍 {v.get('pallet', 'Sem local')}"
             for i, v in enumerate(st.session_state.estoque)
         ]
         idx_selecionado = st.selectbox(
@@ -322,7 +364,14 @@ elif menu == "4. Editar vinho existente":
 
         with st.form("form_editar"):
             novo_nome = st.text_input("Novo Nome:", str(vinho.get("nome", "")))
-            novo_tipo = st.text_input("Novo Tipo:", str(vinho.get("tipo", "")))
+            
+            col_t, col_s = st.columns(2)
+            with col_t:
+                novo_tipo = st.text_input("Novo Tipo:", str(vinho.get("tipo", "")))
+            with col_s:
+                safra_atual = str(vinho.get("safra", "Sem Safra (NV)"))
+                idx_s = OPCOES_SAFRA.index(safra_atual) if safra_atual in OPCOES_SAFRA else 0
+                nova_safra = st.selectbox("Nova Safra:", OPCOES_SAFRA, index=idx_s)
 
             col_p, col_l = st.columns(2)
             with col_p:
@@ -359,6 +408,7 @@ elif menu == "4. Editar vinho existente":
                 st.session_state.estoque[idx_selecionado] = {
                     "nome": novo_nome,
                     "tipo": novo_tipo,
+                    "safra": nova_safra,
                     "pallet": novo_pallet,
                     "lado": novo_lado,
                     "caixa": nova_caixa,
@@ -376,7 +426,7 @@ elif menu == "5. Excluir vinho":
         st.warning("Nenhum vinho cadastrado.")
     else:
         opcoes_excluir = [
-            f"{i + 1}. {v.get('nome', 'Sem nome')} ({v.get('tipo', 'S/T')}) - 📍 {v.get('pallet', 'Sem local')} ({v.get('lado', 'S/L')})"
+            f"{i + 1}. {v.get('nome', 'Sem nome')} ({v.get('safra', 'NV')}) - 📍 {v.get('pallet', 'Sem local')} ({v.get('lado', 'S/L')})"
             for i, v in enumerate(st.session_state.estoque)
         ]
 
