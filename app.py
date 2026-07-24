@@ -3,13 +3,6 @@ import os
 import pandas as pd
 import streamlit as st
 
-# Tenta importar biblioteca de transcrição de áudio se disponível
-try:
-    import speech_recognition as sr
-    HAS_SR = True
-except ImportError:
-    HAS_SR = False
-
 # Configuração da página
 st.set_page_config(
     page_title="Mapa Estoque Galpão Premium",
@@ -91,20 +84,7 @@ def salvar_dados(estoque):
         st.error(f"Erro ao salvar dados: {e}")
 
 
-def transcritor_audio(audio_file):
-    if not HAS_SR:
-        return None
-    try:
-        r = sr.Recognizer()
-        with sr.AudioFile(audio_file) as source:
-            audio_data = r.record(source)
-            texto = r.recognize_google(audio_data, language="pt-BR")
-            return texto
-    except Exception:
-        return None
-
-
-# Inicializa a sessão
+# Inicializa a sessão (Mantém autenticado mesmo recarregando a página no celular)
 if "estoque" not in st.session_state:
     st.session_state.estoque = carregar_dados()
 
@@ -115,6 +95,7 @@ if "autenticado" not in st.session_state:
 if not st.session_state.autenticado:
     st.title("🔒 ACESSO RESTRITO - GALPÃO")
     st.subheader("Mapa Estoque Galpão Premium")
+    st.caption("Sistema de Localização de vinhos do Galpão")
     st.write("Digite a senha para acessar o sistema de estoque:")
 
     senha_digitada = st.text_input("Senha de Acesso:", type="password")
@@ -166,12 +147,13 @@ st.sidebar.markdown("---")
 menu = st.sidebar.radio(
     "Navegação",
     [
-        "1. Buscar vinho (Voz e Texto)",
+        "1. Buscar vinho",
         "2. Ver todos os vinhos",
         "3. Cadastrar novo vinho",
         "4. Editar vinho existente",
         "5. Excluir vinho",
         "6. Exportar planilha (CSV)",
+        "7. Gerar QR Code do Pallet",
     ],
 )
 
@@ -180,30 +162,14 @@ st.sidebar.markdown(f"👨‍💻 **Desenvolvido por:** {NOME_DEV}")
 st.sidebar.markdown(f"📞 **Contato:** {FONE_DEV}")
 
 # 1. BUSCAR VINHO
-if menu == "1. Buscar vinho (Voz e Texto)":
+if menu == "1. Buscar vinho":
     st.header("🔍 BUSCAR VINHO NO GALPÃO")
 
-    sub_op = st.radio("Como deseja buscar?", ["Por Nome", "Por Tipo", "Por Safra"])
+    sub_op = st.radio("Como deseja buscar?", ["Por Nome", "Por Tipo", "Por Safra", "Por Pallet / Corredor"])
 
-    st.markdown("---")
-    st.write("### 🎙️ Digite ou use o Microfone do Teclado:")
-
-    # Se gravou áudio, tenta transcrever
-    texto_transcrito = ""
-    audio_input = st.audio_input("Grave um áudio rápido com o nome do vinho:")
-    if audio_input and HAS_SR:
-        com_texto = transcritor_audio(audio_input)
-        if com_texto:
-            texto_transcrito = com_texto
-            st.success(f"🗣️ Transcrito com sucesso: **{texto_transcrito}**")
-
-    # Campo de busca manual / preenchido por voz
-    termo_digitado = st.text_input(
-        "🔎 Termo de busca (Dica: Clique no campo e use o microfone do teclado do celular):",
-        value=texto_transcrito,
-    )
-
-    termo = termo_digitado.strip().lower()
+    termo = st.text_input(
+        "🔎 Digite o termo de busca (Dica: Use o microfone do teclado do celular):"
+    ).strip().lower()
 
     if termo:
         resultados = []
@@ -211,6 +177,7 @@ if menu == "1. Buscar vinho (Voz e Texto)":
             nome_vinho = str(v.get("nome", "")).lower()
             tipo_vinho = str(v.get("tipo", "")).lower()
             safra_vinho = str(v.get("safra", "")).lower()
+            pallet_vinho = str(v.get("pallet", "")).lower()
 
             if sub_op == "Por Nome" and termo in nome_vinho:
                 resultados.append(v)
@@ -218,9 +185,11 @@ if menu == "1. Buscar vinho (Voz e Texto)":
                 resultados.append(v)
             elif sub_op == "Por Safra" and termo in safra_vinho:
                 resultados.append(v)
+            elif sub_op == "Por Pallet / Corredor" and termo in pallet_vinho:
+                resultados.append(v)
 
         if not resultados:
-            st.warning(f"⚠️ Nenhum vinho encontrado para '{termo_digitado}'.")
+            st.warning(f"⚠️ Nenhum vinho encontrado para '{termo}'.")
         else:
             st.success(f"Encontrado(s) {len(resultados)} resultado(s):")
             for v in resultados:
@@ -472,3 +441,49 @@ elif menu == "6. Exportar planilha (CSV)":
         st.info("💡 O arquivo será salvo na pasta de Downloads do seu dispositivo.")
     else:
         st.warning("Nenhum dado para exportar.")
+
+# 7. GERAR QR CODE DO PALLET
+elif menu == "7. Gerar QR Code do Pallet":
+    st.header("📱 GERADOR DE ETIQUETAS QR CODE")
+    st.write("Gere QR Codes para colar nos pallets e consultar o conteúdo sem abrir as caixas.")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        qr_corr = st.selectbox("Selecione o Corredor:", LISTA_CORREDORES)
+    with c2:
+        qr_pal = st.selectbox("Selecione o Pallet:", LISTA_PALLETS)
+
+    pallet_alvo = f"{qr_corr} - {qr_pal}"
+
+    # Busca vinhos armazenados nesse pallet
+    vinhos_no_pallet = [
+        v for v in st.session_state.estoque
+        if str(v.get("pallet", "")).strip().lower() == pallet_alvo.lower()
+    ]
+
+    st.markdown("---")
+    st.subheader(f"📍 Pallet Selecionado: `{pallet_alvo}`")
+
+    if vinhos_no_pallet:
+        st.success(f"📦 Encontrado(s) {len(vinhos_no_pallet)} produto(s) neste pallet:")
+        for v in vinhos_no_pallet:
+            st.write(
+                f"- **{v.get('nome')}** | Safra: **{v.get('safra')}** | Lado: {v.get('lado')} | Cx: {v.get('caixa')}"
+            )
+    else:
+        st.info("ℹ️ NENHUM vinho cadastrado neste pallet no momento.")
+
+    # Gera a imagem do QR Code usando API pública e rápida
+    dados_qr = f"ESTOQUE GALPAO PREMIUM\nLocal: {pallet_alvo}\n"
+    if vinhos_no_pallet:
+        dados_qr += "Conteudo:\n"
+        for item in vinhos_no_pallet:
+            dados_qr += f"- {item.get('nome')} ({item.get('safra')})\n"
+    else:
+        dados_qr += "Pallet Vazio / Livre"
+
+    url_qr = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={st.query_params.get('url', 'https://vtcbv7x.streamlit.app')}?busca={pallet_alvo}"
+
+    st.markdown("### 🖨️ Imagem para Impressão:")
+    st.image(url_qr, caption=f"QR Code para o {pallet_alvo}", width=250)
+    st.caption("Você pode tirar uma foto, print da tela ou imprimir este QR Code e colar na estrutura do pallet!")
