@@ -88,9 +88,10 @@ def salvar_dados(estoque):
 if "estoque" not in st.session_state:
     st.session_state.estoque = carregar_dados()
 
-# Verifica se a senha está nos parâmetros da URL (evita deslogar ao atualizar a página)
+# Verifica parâmetros na URL (senha e busca por QR code)
 query_params = st.query_params
 senha_url = query_params.get("senha", "")
+busca_qr = query_params.get("busca", "")
 
 autenticado = senha_url == SENHA_ACESSO or st.session_state.get(
     "autenticado", False
@@ -146,14 +147,18 @@ st.markdown("---")
 st.sidebar.markdown("### 🏬 Galpão Principal")
 if st.sidebar.button("🔒 Sair do Sistema"):
     st.session_state.autenticado = False
-    if "senha" in st.query_params:
-        del st.query_params["senha"]
+    st.query_params.clear()
     st.rerun()
 
 st.sidebar.markdown("---")
 
+# Define a opção padrão do menu caso venha de um QR Code
+opcao_padrao = 0
+if busca_qr:
+    opcao_padrao = 0  # Direciona para '1. Buscar vinho'
+
 menu = st.sidebar.radio(
-    "Navegação",
+    "📌 Escolha uma opção:",
     [
         "1. Buscar vinho",
         "2. Ver todos os vinhos",
@@ -163,6 +168,7 @@ menu = st.sidebar.radio(
         "6. Exportar planilha (CSV)",
         "7. Gerar QR Code do Pallet",
     ],
+    index=opcao_padrao,
 )
 
 st.sidebar.markdown("---")
@@ -176,11 +182,14 @@ if menu == "1. Buscar vinho":
     sub_op = st.radio(
         "Como deseja buscar?",
         ["Por Nome", "Por Tipo", "Por Safra", "Por Pallet / Corredor"],
+        index=3 if busca_qr else 0,
     )
 
+    valor_inicial = busca_qr if busca_qr else ""
     termo = (
         st.text_input(
-            "🔎 Digite o termo de busca (Dica: Use o microfone do teclado do celular):"
+            "🔎 Digite o termo de busca:",
+            value=valor_inicial,
         )
         .strip()
         .lower()
@@ -213,7 +222,8 @@ if menu == "1. Buscar vinho":
                 )
                 safra_txt = f" ({v.get('safra')})" if v.get("safra") else ""
                 with st.expander(
-                    f"🍷 {v.get('nome', 'Sem nome')}{safra_txt} [{v.get('tipo', 'S/T')}] ➔ 📍 {v.get('pallet', 'S/P')}{lado_txt}"
+                    f"🍷 {v.get('nome', 'Sem nome')}{safra_txt} [{v.get('tipo', 'S/T')}] ➔ 📍 {v.get('pallet', 'S/P')}{lado_txt}",
+                    expanded=True if busca_qr else False,
                 ):
                     st.write(
                         f"**Localização no Galpão:** {v.get('pallet', 'N/I')}"
@@ -521,7 +531,11 @@ elif menu == "7. Gerar QR Code do Pallet":
     else:
         st.info("ℹ️ NENHUM vinho cadastrado neste pallet no momento.")
 
-    url_qr = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https://vtcbv7x.streamlit.app?senha=1980"
+    # URL formatada para entrar logado e direto na busca do pallet
+    import urllib.parse
+    pallet_encoded = urllib.parse.quote(pallet_alvo)
+    link_qr = f"https://vtcbv7x.streamlit.app/?senha=1980%26busca={pallet_encoded}"
+    url_qr = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={urllib.parse.quote(link_qr)}"
 
     st.markdown("### 🖨️ Imagem para Impressão:")
     st.image(url_qr, caption=f"QR Code para o {pallet_alvo}", width=250)
