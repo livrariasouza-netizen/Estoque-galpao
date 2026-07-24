@@ -3,6 +3,13 @@ import os
 import pandas as pd
 import streamlit as st
 
+# Tenta importar biblioteca de transcrição de áudio se disponível
+try:
+    import speech_recognition as sr
+    HAS_SR = True
+except ImportError:
+    HAS_SR = False
+
 # Configuração da página
 st.set_page_config(
     page_title="Mapa Estoque Galpão Premium",
@@ -17,16 +24,13 @@ NOME_ARQUIVO = "estoque_galpao.json"
 NOME_DEV = "Vagner Souza"
 FONE_DEV = "(31) 98968-4010"
 
-# Listas padronizadas expandidas para galpões grandes (Até 25 Corredores e 25 Pallets)
 LISTA_CORREDORES = [f"Corredor {i:02d}" for i in range(1, 26)]
 LISTA_PALLETS = [f"Pallet {i:02d}" for i in range(1, 26)]
 LISTA_LADOS = ["Direito", "Esquerdo", "Centro / Único"]
 
-# Opções de safra padronizadas
 ANOS_SAFRA = [str(ano) for ano in range(2026, 1989, -1)]
 OPCOES_SAFRA = ["Sem Safra (NV)", "Outra / Mais antiga"] + ANOS_SAFRA
 
-# Opções de embalagem padronizadas (máximo 24 garrafas)
 OPCOES_CAIXA = [
     "24 garrafas",
     "12 garrafas",
@@ -36,7 +40,6 @@ OPCOES_CAIXA = [
     "Outra quantidade",
 ]
 
-# Dados iniciais de exemplo do Galpão
 estoque_padrao = [
     {
         "nome": "Falernia Reserva",
@@ -88,6 +91,19 @@ def salvar_dados(estoque):
         st.error(f"Erro ao salvar dados: {e}")
 
 
+def transcritor_audio(audio_file):
+    if not HAS_SR:
+        return None
+    try:
+        r = sr.Recognizer()
+        with sr.AudioFile(audio_file) as source:
+            audio_data = r.record(source)
+            texto = r.recognize_google(audio_data, language="pt-BR")
+            return texto
+    except Exception:
+        return None
+
+
 # Inicializa a sessão
 if "estoque" not in st.session_state:
     st.session_state.estoque = carregar_dados()
@@ -95,7 +111,7 @@ if "estoque" not in st.session_state:
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 
-# --- TELA DE LOGIN / PROTEÇÃO POR SENHA ---
+# --- TELA DE LOGIN ---
 if not st.session_state.autenticado:
     st.title("🔒 ACESSO RESTRITO - GALPÃO")
     st.subheader("Mapa Estoque Galpão Premium")
@@ -111,7 +127,7 @@ if not st.session_state.autenticado:
             st.error("Senha incorreta!")
     st.stop()
 
-# --- EXIBIÇÃO DA LOGO E TÍTULO ---
+# --- TÍTULO E LOGO ---
 col_logo, col_titulo = st.columns([1, 4])
 
 nomes_logo = [
@@ -169,17 +185,25 @@ if menu == "1. Buscar vinho (Voz e Texto)":
 
     sub_op = st.radio("Como deseja buscar?", ["Por Nome", "Por Tipo", "Por Safra"])
 
-    st.markdown("#### 🎙️ Busca por Voz / Áudio")
-    audio_input = st.audio_input(
-        "Toque no microfone e fale o nome do vinho, marca ou safra:"
+    st.markdown("---")
+    st.write("### 🎙️ Digite ou use o Microfone do Teclado:")
+
+    # Se gravou áudio, tenta transcrever
+    texto_transcrito = ""
+    audio_input = st.audio_input("Grave um áudio rápido com o nome do vinho:")
+    if audio_input and HAS_SR:
+        com_texto = transcritor_audio(audio_input)
+        if com_texto:
+            texto_transcrito = com_texto
+            st.success(f"🗣️ Transcrito com sucesso: **{texto_transcrito}**")
+
+    # Campo de busca manual / preenchido por voz
+    termo_digitado = st.text_input(
+        "🔎 Termo de busca (Dica: Clique no campo e use o microfone do teclado do celular):",
+        value=texto_transcrito,
     )
 
-    if audio_input:
-        st.info(
-            "💡 Áudio gravado! Você também pode digitar no campo abaixo para confirmar."
-        )
-
-    termo = st.text_input("Ou digite o termo de busca:").strip().lower()
+    termo = termo_digitado.strip().lower()
 
     if termo:
         resultados = []
@@ -196,7 +220,7 @@ if menu == "1. Buscar vinho (Voz e Texto)":
                 resultados.append(v)
 
         if not resultados:
-            st.warning(f"⚠️ Nenhum vinho encontrado para '{termo}'.")
+            st.warning(f"⚠️ Nenhum vinho encontrado para '{termo_digitado}'.")
         else:
             st.success(f"Encontrado(s) {len(resultados)} resultado(s):")
             for v in resultados:
@@ -259,7 +283,6 @@ elif menu == "3. Cadastrar novo vinho":
 
     nome = st.text_input("Nome do vinho / Marca:").strip()
 
-    # Verificação WMS de duplicidade/safra existente
     outras_safras = []
     if nome:
         outras_safras = [
@@ -288,7 +311,6 @@ elif menu == "3. Cadastrar novo vinho":
         if safra_opcao == "Outra / Mais antiga":
             safra_custom = st.text_input("Digite o ano da safra (Ex: 1985):")
 
-        # Seleção Rápida de Localização (Corredor 01-25 + Pallet 01-25)
         col_corr, col_pal, col_lad = st.columns(3)
         with col_corr:
             sel_corredor = st.selectbox("🛣️ Corredor:", LISTA_CORREDORES)
@@ -327,7 +349,6 @@ elif menu == "3. Cadastrar novo vinho":
                 volume_custom if vol_opcao == "Outro valor" else vol_opcao
             )
 
-            # Junta o corredor com o pallet de forma padronizada
             pallet_final = f"{sel_corredor} - {sel_pallet}"
 
             if nome and tipo:
