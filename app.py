@@ -1,5 +1,6 @@
 import json
 import os
+import urllib.parse
 import pandas as pd
 import streamlit as st
 
@@ -88,17 +89,11 @@ def salvar_dados(estoque):
 if "estoque" not in st.session_state:
     st.session_state.estoque = carregar_dados()
 
-# Verifica parâmetros na URL (senha e busca por QR code)
-query_params = st.query_params
-senha_url = query_params.get("senha", "")
-busca_qr = query_params.get("busca", "")
-
-autenticado = senha_url == SENHA_ACESSO or st.session_state.get(
-    "autenticado", False
-)
+if "autenticado" not in st.session_state:
+    st.session_state.autenticado = False
 
 # --- TELA DE LOGIN ---
-if not autenticado:
+if not st.session_state.autenticado:
     st.title("🔒 ACESSO RESTRITO - GALPÃO")
     st.subheader("Mapa Estoque Galpão Premium")
     st.caption("Sistema de Localização de vinhos do Galpão")
@@ -108,7 +103,6 @@ if not autenticado:
     if st.button("🔑 Entrar no Sistema"):
         if senha_digitada == SENHA_ACESSO:
             st.session_state.autenticado = True
-            st.query_params["senha"] = SENHA_ACESSO
             st.success("Acesso Liberado!")
             st.rerun()
         else:
@@ -147,15 +141,9 @@ st.markdown("---")
 st.sidebar.markdown("### 🏬 Galpão Principal")
 if st.sidebar.button("🔒 Sair do Sistema"):
     st.session_state.autenticado = False
-    st.query_params.clear()
     st.rerun()
 
 st.sidebar.markdown("---")
-
-# Define a opção padrão do menu caso venha de um QR Code
-opcao_padrao = 0
-if busca_qr:
-    opcao_padrao = 0  # Direciona para '1. Buscar vinho'
 
 menu = st.sidebar.radio(
     "📌 Escolha uma opção:",
@@ -168,7 +156,6 @@ menu = st.sidebar.radio(
         "6. Exportar planilha (CSV)",
         "7. Gerar QR Code do Pallet",
     ],
-    index=opcao_padrao,
 )
 
 st.sidebar.markdown("---")
@@ -182,14 +169,11 @@ if menu == "1. Buscar vinho":
     sub_op = st.radio(
         "Como deseja buscar?",
         ["Por Nome", "Por Tipo", "Por Safra", "Por Pallet / Corredor"],
-        index=3 if busca_qr else 0,
     )
 
-    valor_inicial = busca_qr if busca_qr else ""
     termo = (
         st.text_input(
-            "🔎 Digite o termo de busca:",
-            value=valor_inicial,
+            "🔎 Digite o termo de busca (Ex: Corredor 01 ou Falernia):"
         )
         .strip()
         .lower()
@@ -223,7 +207,7 @@ if menu == "1. Buscar vinho":
                 safra_txt = f" ({v.get('safra')})" if v.get("safra") else ""
                 with st.expander(
                     f"🍷 {v.get('nome', 'Sem nome')}{safra_txt} [{v.get('tipo', 'S/T')}] ➔ 📍 {v.get('pallet', 'S/P')}{lado_txt}",
-                    expanded=True if busca_qr else False,
+                    expanded=True,
                 ):
                     st.write(
                         f"**Localização no Galpão:** {v.get('pallet', 'N/I')}"
@@ -500,7 +484,7 @@ elif menu == "6. Exportar planilha (CSV)":
 elif menu == "7. Gerar QR Code do Pallet":
     st.header("📱 GERADOR DE ETIQUETAS QR CODE")
     st.write(
-        "Gere QR Codes para colar nos pallets e consultar o conteúdo sem abrir as caixas."
+        "Gere QR Codes limpos e seguros para colar nos pallets e acessar o aplicativo com a câmera do celular."
     )
 
     c1, c2 = st.columns(2)
@@ -531,14 +515,12 @@ elif menu == "7. Gerar QR Code do Pallet":
     else:
         st.info("ℹ️ NENHUM vinho cadastrado neste pallet no momento.")
 
-    # URL formatada para entrar logado e direto na busca do pallet
-    import urllib.parse
-    pallet_encoded = urllib.parse.quote(pallet_alvo)
-    link_qr = f"https://vtcbv7x.streamlit.app/?senha=1980%26busca={pallet_encoded}"
-    url_qr = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={urllib.parse.quote(link_qr)}"
+    # URL limpa para abrir o sistema diretamente sem bloqueios
+    link_limpo = "https://vtcbv7x.streamlit.app"
+    url_qr = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={urllib.parse.quote(link_limpo)}"
 
-    st.markdown("### 🖨️ Imagem para Impressão:")
-    st.image(url_qr, caption=f"QR Code para o {pallet_alvo}", width=250)
+    st.markdown("### 🖨️ QR Code de Acesso Rápido ao Galpão:")
+    st.image(url_qr, caption=f"QR Code do aplicativo ({pallet_alvo})", width=250)
     st.caption(
-        "Você pode tirar um print da tela ou imprimir este QR Code e colar na estrutura do pallet!"
+        "Imprima este QR Code e cole na estrutura do pallet. Ao apontar a câmera do celular, o sistema abrirá diretamente sem erros de permissão."
     )
