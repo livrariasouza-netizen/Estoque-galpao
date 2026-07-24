@@ -84,15 +84,20 @@ def salvar_dados(estoque):
         st.error(f"Erro ao salvar dados: {e}")
 
 
-# Inicializa a sessão (Mantém autenticado mesmo recarregando a página no celular)
+# Inicializa a sessão
 if "estoque" not in st.session_state:
     st.session_state.estoque = carregar_dados()
 
-if "autenticado" not in st.session_state:
-    st.session_state.autenticado = False
+# Verifica se a senha está nos parâmetros da URL (evita deslogar ao atualizar a página)
+query_params = st.query_params
+senha_url = query_params.get("senha", "")
+
+autenticado = senha_url == SENHA_ACESSO or st.session_state.get(
+    "autenticado", False
+)
 
 # --- TELA DE LOGIN ---
-if not st.session_state.autenticado:
+if not autenticado:
     st.title("🔒 ACESSO RESTRITO - GALPÃO")
     st.subheader("Mapa Estoque Galpão Premium")
     st.caption("Sistema de Localização de vinhos do Galpão")
@@ -102,6 +107,7 @@ if not st.session_state.autenticado:
     if st.button("🔑 Entrar no Sistema"):
         if senha_digitada == SENHA_ACESSO:
             st.session_state.autenticado = True
+            st.query_params["senha"] = SENHA_ACESSO
             st.success("Acesso Liberado!")
             st.rerun()
         else:
@@ -140,6 +146,8 @@ st.markdown("---")
 st.sidebar.markdown("### 🏬 Galpão Principal")
 if st.sidebar.button("🔒 Sair do Sistema"):
     st.session_state.autenticado = False
+    if "senha" in st.query_params:
+        del st.query_params["senha"]
     st.rerun()
 
 st.sidebar.markdown("---")
@@ -165,11 +173,18 @@ st.sidebar.markdown(f"📞 **Contato:** {FONE_DEV}")
 if menu == "1. Buscar vinho":
     st.header("🔍 BUSCAR VINHO NO GALPÃO")
 
-    sub_op = st.radio("Como deseja buscar?", ["Por Nome", "Por Tipo", "Por Safra", "Por Pallet / Corredor"])
+    sub_op = st.radio(
+        "Como deseja buscar?",
+        ["Por Nome", "Por Tipo", "Por Safra", "Por Pallet / Corredor"],
+    )
 
-    termo = st.text_input(
-        "🔎 Digite o termo de busca (Dica: Use o microfone do teclado do celular):"
-    ).strip().lower()
+    termo = (
+        st.text_input(
+            "🔎 Digite o termo de busca (Dica: Use o microfone do teclado do celular):"
+        )
+        .strip()
+        .lower()
+    )
 
     if termo:
         resultados = []
@@ -255,17 +270,22 @@ elif menu == "3. Cadastrar novo vinho":
     outras_safras = []
     if nome:
         outras_safras = [
-            v for v in st.session_state.estoque
+            v
+            for v in st.session_state.estoque
             if str(v.get("nome", "")).strip().lower() == nome.lower()
         ]
 
     if outras_safras:
-        st.info(f"ℹ️ **Atenção:** Este vinho já possui **{len(outras_safras)} registro(s)** no galpão:")
+        st.info(
+            f"ℹ️ **Atenção:** Este vinho já possui **{len(outras_safras)} registro(s)** no galpão:"
+        )
         for item in outras_safras:
             st.write(
                 f"- **Safra {item.get('safra', 'N/I')}** ➔ Local: `{item.get('pallet', 'N/I')}` (Lado: {item.get('lado', 'N/I')})"
             )
-        st.caption("Você pode cadastrar uma **nova safra** ou **outra localização** preenchendo o formulário abaixo:")
+        st.caption(
+            "Você pode cadastrar uma **nova safra** ou **outra localização** preenchendo o formulário abaixo:"
+        )
 
     with st.form("form_cadastrar"):
         col_tipo, col_safra = st.columns(2)
@@ -309,10 +329,14 @@ elif menu == "3. Cadastrar novo vinho":
 
         if submit:
             safra_final = (
-                safra_custom if safra_opcao == "Outra / Mais antiga" else safra_opcao
+                safra_custom
+                if safra_opcao == "Outra / Mais antiga"
+                else safra_opcao
             )
             caixa_final = (
-                caixa_custom if caixa_opcao == "Outra quantidade" else caixa_opcao
+                caixa_custom
+                if caixa_opcao == "Outra quantidade"
+                else caixa_opcao
             )
             volume_final = (
                 volume_custom if vol_opcao == "Outro valor" else vol_opcao
@@ -360,26 +384,46 @@ elif menu == "4. Editar vinho existente":
 
         with st.form("form_editar"):
             novo_nome = st.text_input("Novo Nome:", str(vinho.get("nome", "")))
-            
+
             col_t, col_s = st.columns(2)
             with col_t:
-                novo_tipo = st.text_input("Novo Tipo:", str(vinho.get("tipo", "")))
+                novo_tipo = st.text_input(
+                    "Novo Tipo:", str(vinho.get("tipo", ""))
+                )
             with col_s:
                 safra_atual = str(vinho.get("safra", "Sem Safra (NV)"))
-                idx_s = OPCOES_SAFRA.index(safra_atual) if safra_atual in OPCOES_SAFRA else 0
-                nova_safra = st.selectbox("Nova Safra:", OPCOES_SAFRA, index=idx_s)
+                idx_s = (
+                    OPCOES_SAFRA.index(safra_atual)
+                    if safra_atual in OPCOES_SAFRA
+                    else 0
+                )
+                nova_safra = st.selectbox(
+                    "Nova Safra:", OPCOES_SAFRA, index=idx_s
+                )
 
-            novo_pallet = st.text_input("Nova Localização:", str(vinho.get("pallet", "")))
-            
+            novo_pallet = st.text_input(
+                "Nova Localização:", str(vinho.get("pallet", ""))
+            )
+
             lado_atual = vinho.get("lado", "Direito")
-            idx_l = LISTA_LADOS.index(lado_atual) if lado_atual in LISTA_LADOS else 0
+            idx_l = (
+                LISTA_LADOS.index(lado_atual)
+                if lado_atual in LISTA_LADOS
+                else 0
+            )
             novo_lado = st.selectbox("Novo Lado:", LISTA_LADOS, index=idx_l)
 
             caixa_atual = vinho.get("caixa", "12 garrafas")
-            idx_caixa = OPCOES_CAIXA.index(caixa_atual) if caixa_atual in OPCOES_CAIXA else 0
+            idx_caixa = (
+                OPCOES_CAIXA.index(caixa_atual)
+                if caixa_atual in OPCOES_CAIXA
+                else 0
+            )
             nova_caixa = st.selectbox("Caixa:", OPCOES_CAIXA, index=idx_caixa)
 
-            novo_volume = st.text_input("Volume:", str(vinho.get("volume", "750ml")))
+            novo_volume = st.text_input(
+                "Volume:", str(vinho.get("volume", "750ml"))
+            )
 
             submit_edit = st.form_submit_button("💾 Salvar Alterações")
 
@@ -445,7 +489,9 @@ elif menu == "6. Exportar planilha (CSV)":
 # 7. GERAR QR CODE DO PALLET
 elif menu == "7. Gerar QR Code do Pallet":
     st.header("📱 GERADOR DE ETIQUETAS QR CODE")
-    st.write("Gere QR Codes para colar nos pallets e consultar o conteúdo sem abrir as caixas.")
+    st.write(
+        "Gere QR Codes para colar nos pallets e consultar o conteúdo sem abrir as caixas."
+    )
 
     c1, c2 = st.columns(2)
     with c1:
@@ -455,9 +501,9 @@ elif menu == "7. Gerar QR Code do Pallet":
 
     pallet_alvo = f"{qr_corr} - {qr_pal}"
 
-    # Busca vinhos armazenados nesse pallet
     vinhos_no_pallet = [
-        v for v in st.session_state.estoque
+        v
+        for v in st.session_state.estoque
         if str(v.get("pallet", "")).strip().lower() == pallet_alvo.lower()
     ]
 
@@ -465,7 +511,9 @@ elif menu == "7. Gerar QR Code do Pallet":
     st.subheader(f"📍 Pallet Selecionado: `{pallet_alvo}`")
 
     if vinhos_no_pallet:
-        st.success(f"📦 Encontrado(s) {len(vinhos_no_pallet)} produto(s) neste pallet:")
+        st.success(
+            f"📦 Encontrado(s) {len(vinhos_no_pallet)} produto(s) neste pallet:"
+        )
         for v in vinhos_no_pallet:
             st.write(
                 f"- **{v.get('nome')}** | Safra: **{v.get('safra')}** | Lado: {v.get('lado')} | Cx: {v.get('caixa')}"
@@ -473,17 +521,10 @@ elif menu == "7. Gerar QR Code do Pallet":
     else:
         st.info("ℹ️ NENHUM vinho cadastrado neste pallet no momento.")
 
-    # Gera a imagem do QR Code usando API pública e rápida
-    dados_qr = f"ESTOQUE GALPAO PREMIUM\nLocal: {pallet_alvo}\n"
-    if vinhos_no_pallet:
-        dados_qr += "Conteudo:\n"
-        for item in vinhos_no_pallet:
-            dados_qr += f"- {item.get('nome')} ({item.get('safra')})\n"
-    else:
-        dados_qr += "Pallet Vazio / Livre"
-
-    url_qr = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={st.query_params.get('url', 'https://vtcbv7x.streamlit.app')}?busca={pallet_alvo}"
+    url_qr = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https://vtcbv7x.streamlit.app?senha=1980"
 
     st.markdown("### 🖨️ Imagem para Impressão:")
     st.image(url_qr, caption=f"QR Code para o {pallet_alvo}", width=250)
-    st.caption("Você pode tirar uma foto, print da tela ou imprimir este QR Code e colar na estrutura do pallet!")
+    st.caption(
+        "Você pode tirar um print da tela ou imprimir este QR Code e colar na estrutura do pallet!"
+    )
